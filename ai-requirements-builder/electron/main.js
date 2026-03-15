@@ -19,9 +19,12 @@ function createWindow() {
   })
 
   // 开发环境加载 Vite dev server
-  if (process.env.NODE_ENV === 'development') {
+  const isDevelopment = process.argv.includes('--dev') || 
+                        !require('fs').existsSync(path.join(__dirname, '../../dist/index.html'))
+  
+  if (isDevelopment) {
     mainWindow.loadURL('http://localhost:5173')
-    mainWindow.webContents.openDevTools()
+    mainWindow.webContents.openDevTools({ mode: 'detach' })
   } else {
     mainWindow.loadFile(path.join(__dirname, '../../dist/index.html'))
   }

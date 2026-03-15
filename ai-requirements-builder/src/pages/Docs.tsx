@@ -8,6 +8,8 @@ import {
   SettingOutlined
 } from '@ant-design/icons'
 import { useNavigate } from 'react-router-dom'
+import * as docx from 'docx'
+import { saveAs } from 'file-saver'
 import './Docs.css'
 
 const { Header, Content } = Layout
@@ -137,6 +139,139 @@ ${answers.performance || '待补充'}
     message.success('导出成功！')
   }
 
+  // 导出为 Word (DOCX) - 带排版的美化版本
+  const handleExportWord = async () => {
+    try {
+      // 清理 HTML 标签，获取纯文本
+      const cleanText = docContent.replace(/<[^>]*>/g, '').replace(/\n{3,}/g, '\n\n')
+      const lines = cleanText.split('\n').filter(line => line.trim())
+      
+      const children: any[] = []
+      
+      // 解析标题和内容
+      let currentSection = ''
+      let sectionLevel = 0
+      
+      lines.forEach((line, index) => {
+        if (line.startsWith('#')) {
+          // 标题行
+          const level = (line.match(/^#+/g) || []).length
+          const text = line.replace(/^#+\s*/, '')
+          
+          if (level === 1) {
+            children.push(new docx.Paragraph({
+              text: text,
+              heading: docx.HeadingLevel.HEADING_1,
+              spacing: { after: 200 },
+              alignment: docx.AlignmentType.CENTER,
+              bold: true,
+            }))
+            sectionLevel = 1
+          } else if (level === 2) {
+            children.push(new docx.Paragraph({
+              text: text,
+              heading: docx.HeadingLevel.HEADING_2,
+              spacing: { before: 200, after: 100 },
+              bold: true,
+            }))
+            sectionLevel = 2
+          } else if (level === 3) {
+            children.push(new docx.Paragraph({
+              text: text,
+              heading: docx.HeadingLevel.HEADING_3,
+              spacing: { before: 100 },
+              bold: true,
+            }))
+            sectionLevel = 3
+          }
+        } else if (line.includes('- **') && line.includes(':')) {
+          // 属性行
+          children.push(new docx.Paragraph({
+            text: line,
+            spacing: { before: 50, after: 50 },
+            bullet: { level: 0 },
+          }))
+        } else if (line.match(/^\d+\./)) {
+          // 列表项
+          children.push(new docx.Paragraph({
+            text: line,
+            numbering: {
+              reference: 'default-list',
+              level: 0,
+            },
+            spacing: { before: 50, after: 50 },
+          }))
+        } else if (line.trim()) {
+          // 普通段落
+          children.push(new docx.Paragraph({
+            text: line,
+            spacing: { after: 100 },
+          }))
+        }
+      })
+      
+      // 从 docContent 提取应用名称（第一个 # 后面的内容）
+      const appNameMatch = docContent.match(/^# (.*) - /)
+      const appName = appNameMatch ? appNameMatch[1] : '项目'
+      
+      // 创建文档
+      const doc = new docx.Document({
+        sections: [{
+          properties: {},
+          children: [
+            // 标题
+            new docx.Paragraph({
+              text: `${appName} - 需求规格说明书`,
+              heading: docx.HeadingLevel.TITLE,
+              alignment: docx.AlignmentType.CENTER,
+              spacing: { after: 400 },
+              runs: [new docx.Run({
+                text: `${appName} - 需求规格说明书`,
+                bold: true,
+                size: 36,
+              })],
+            }),
+            
+            // 元信息
+            new docx.Paragraph({
+              text: `生成时间：${new Date().toLocaleString('zh-CN')} | 版本号：v1.0`,
+              alignment: docx.AlignmentType.CENTER,
+              spacing: { before: 200, after: 400 },
+              italic: true,
+            }),
+            
+            // 分隔线（用空白行代替）
+            new docx.Paragraph({ text: '', spacing: { after: 600 } }),
+            
+            // 内容
+            ...children,
+            
+            // 底部脚注
+            new docx.Paragraph({
+              text: '',
+              spacing: { before: 800 },
+            }),
+            new docx.Paragraph({
+              text: '本需求文档由 AI Requirements Builder v1.0 自动生成',
+              alignment: docx.AlignmentType.CENTER,
+              spacing: { after: 200 },
+              italics: true,
+              textColor: '666666',
+            }),
+          ],
+        }],
+      })
+      
+      // 生成文件
+      const blob = await docx.Packer.toBlob(doc)
+      saveAs(blob, `${appName}_需求说明书_${new Date().toISOString().split('T')[0]}.docx`)
+      message.success('Word 文档导出成功！(已美化排版)')
+    } catch (error) {
+      console.error('Word 导出失败:', error)
+      message.error('导出失败，请重试')
+    }
+  }
+
   return (
     <Layout className="docs-layout">
       <Header style={{ background: '#fff', padding: '12px 24px', borderBottom: '1px solid #f0f0f0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -147,8 +282,9 @@ ${answers.performance || '待补充'}
         <Space>
           <Button onClick={() => navigate('/settings')} icon={<SettingOutlined />}>设置</Button>
           <Divider type="vertical" />
-          <Button type="primary" onClick={handleExportMarkdown} icon={<DownloadOutlined />}>导出 .md</Button>
-          <Button onClick={handleExportTxt} icon={<DownloadOutlined />}>导出 .txt</Button>
+          <Button type="primary" onClick={handleExportWord} icon={<DownloadOutlined />} title="带排版的 Word 文档">.docx</Button>
+          <Button type="default" onClick={handleExportMarkdown} icon={<DownloadOutlined />}>.md</Button>
+          <Button type="default" onClick={handleExportTxt} icon={<DownloadOutlined />}>.txt</Button>
         </Space>
       </Header>
 
